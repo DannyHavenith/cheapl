@@ -10,13 +10,16 @@
 int main()
 {
 	alsalib &alsa( alsalib::get_instance());
+	soundcard transmitter;
 	for (auto card : alsa.get_cards())
 	{
 		if (card.get_name() == "Generic USB Audio Device")
 		{
-			
-			std::cout << card.get_name() << '\n';
+			transmitter = card;
 		}
 	}
+
+    std::cout << transmitter.get_name() << '\n';
+
 	return 0;
 }

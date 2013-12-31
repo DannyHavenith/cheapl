@@ -58,8 +58,7 @@ class pcm_device_iterator: public std::iterator<std::forward_iterator_tag, pcm_d
 {
 public:
 	pcm_device_iterator(snd_ctl_t *handle) :
-			card_handle
-			{ handle }
+			card_handle{ handle }
 	{
 	}
 
@@ -88,6 +87,7 @@ private:
 	int index = -1;
 	snd_ctl_t *card_handle;
 };
+
 class opened_soundcard: boost::noncopyable
 {
 public:
@@ -134,10 +134,11 @@ class soundcard
 public:
 
 	explicit soundcard(int index) :
-			index(index), card
-			{ "hw:" + std::to_string(index) }
+			index(index), card{ "hw:" + std::to_string(index) }
 	{
 	}
+
+	soundcard() : soundcard{0} {}
 
 	std::string get_name() const
 	{
@@ -199,11 +200,11 @@ public:
 	alsa_container( handle_t handle)
 	:handle( handle) {}
 
-	iterator_type begin()
+	iterator_type begin() const
 	{
 		return ++iterator_type(handle);
 	}
-	iterator_type end()
+	iterator_type end() const
 	{
 		return iterator_type(handle);
 	}
@@ -211,17 +212,15 @@ private:
 	handle_t handle;
 };
 
-
-
 class alsalib
 {
 public:
 
 	typedef alsa_container<soundcard_iterator> soundcard_container_type;
 
-	soundcard_container_type get_cards() const
+	const soundcard_container_type &get_cards() const
 	{
-		return soundcard_container_type( 0);
+		return cards;
 	}
 
 	static alsalib & get_instance()
@@ -234,6 +233,8 @@ private:
 	{
 		snd_config_update_free_global();
 	}
+
+	soundcard_container_type cards{0};
 };
 
 #endif /* ALSA_WRAPPER_HPP_ */
