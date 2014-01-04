@@ -10,21 +10,21 @@
 
 #if !defined(WAV_FILE_HPP)
 #define WAV_FILE_HPP
-
+#include <cstdint>
 struct riff_fmt
 {
-    unsigned short compression;
-    unsigned short channels;
-    unsigned long  samplerate;
-    unsigned long  bytes_per_second;
-    unsigned short block_align;
-    unsigned short bits_per_sample;
+    uint16_t compression;
+    uint16_t channels;
+    uint32_t samplerate;
+    uint32_t bytes_per_second;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
 };
 
 struct riff_data
 {
     std::size_t pos; ///<position in file of samples
-    std::size_t size;///<size of sample data.
+    uint32_t    size;///<size of sample data.
 };
 
 struct wav_file

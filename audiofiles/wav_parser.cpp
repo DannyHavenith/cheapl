@@ -1,119 +1,179 @@
 //
-//  Copyright (C) 2012 Danny Havenith
+//  Copyright (C) 2013 Danny Havenith
 //
 //  Distributed under the Boost Software License, Version 1.0. (See
 //  accompanying file LICENSE_1_0.txt or copy at
 //  http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#include <vector>
-#include <iostream>
-#include <iterator>
-#include <iomanip>
-#include <string>
-
-#include <boost/config/warning_disable.hpp>
-
-#include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix_core.hpp>
-#include <boost/spirit/include/phoenix_fusion.hpp>
-#include <boost/spirit/include/phoenix_object.hpp>
-#include <boost/spirit/include/phoenix_operator.hpp>
-#include <boost/spirit/include/qi_binary.hpp>
-#include <boost/spirit/home/support/iterators/istream_iterator.hpp>
-
 #include "include/wav_parser.hpp"
-#include "next_directive.hpp"
-#include "wav_file_fusion.hpp"
+#include <iostream>
+#include <string>
+#include <stdexcept>
+#include <deque>
 
-#define DEBUG_NODE( node) BOOST_SPIRIT_DEBUG_NODE( node); debug( node);
-
-using namespace std;
-using namespace boost::phoenix;
-using namespace boost::spirit;
-using namespace boost::spirit::qi;
-
-/// Grammar for wav files.
-/// This grammar can be used to parse wav files. It generates a wav_file struct from the contents of the file.
-template<typename Iterator>
-struct wav_parser: grammar< Iterator, wav_file()>
+/// simple wav-file reader class. objects of this class can be used to read a wav file and parse it for information about the
+/// sample format and the location in the file of the sample data.
+class wav_reader
 {
-    using base_type = grammar< Iterator, wav_file()>;
-    wav_parser() :
-        wav_parser::base_type( file)
+public:
+    class wav_file_exception : public std::runtime_error
     {
-        using boost::spirit::ascii::char_;
-        using boost::phoenix::ref;
-        using boost::phoenix::at_c;
-        using boost::phoenix::construct;
-        using next_directive::next;
+    public:
+        wav_file_exception( const std::string reason)
+                :runtime_error( "error reading wav file:" + reason){}
+    };
 
-        file
-            %= riff
-            ;
+    wav_reader(std::istream &input, wav_file &result)
+    :in(input), result(result) {};
 
-        // a RIFF file consists of a RIFF header, followed by a sequence consisting of
-        // format chunk(s) and data chunk(s).
-        // Normally this is just a format chunk followed by a data chunk, but this parser
-        // will take them in any order and stores only the last format chunk and the last data
-        // chunk.
-        riff
-            = riff_header[_a = _1]
-              >>
-                      +(
-                          fmt      [at_c<0>(_val) = _1]  // format chunk, or
-                          |  data  [at_c<1>(_val) = _1]  // data chunk
-                      )
+    bool riff()
+    {
+        expect( "RIFF");
+        uint32_t filesize;
+        read( filesize);
+        expect( "WAVE");
 
-            ;
+        while( (in.peek(), !in.eof()) && expect(fmt() || data(), "expected either a fmt- or a data chunk"))
+        {
+            // do nothing
+        }
 
-        riff_header
-            %= lit("RIFF") > little_dword > lit("WAVE")
-            ;
+        return in;
+}
 
-        fmt
-            %=
-                lit("fmt ")
-                >   omit[dword[_a = _1]] // chunk size
-                >   next(_a + (_a%2))[
-                        word  // compression
-                        > word  // channels
-                        > dword // sample rate
-                        > dword // bytes per second
-                        > word  // block align
-                        > word  // bits per sample
-                        > omit[*byte_]  // extra format bytes, ignored
-                    ]
-            ;
-
-        dword %= little_dword;
-        word %= little_word;
-        data
-            = lit("data")  > omit[ little_dword[_a = _1][ at_c<1>(_val) = _1] > repeat( _a + (_a%2))[ byte_]]
-            ;
-        on_error<fail>
-         (
-             file
-           , std::cout
-                 << val("Error! Expecting ")
-                 << _4                               // what failed?
-                 << std::endl
-         );
-
-        DEBUG_NODE( file);
-        DEBUG_NODE(riff);
-        DEBUG_NODE( riff_header);
-        DEBUG_NODE( fmt);
-        DEBUG_NODE( data);
-        DEBUG_NODE(dword);
-        DEBUG_NODE(word);
+private:
+    /// Expect a 4-character sequence in the file.
+    /// The first argument is a 5-characters sequence because the string literal "abcd" also contains the terminating zero.
+    bool expect( const char (&keyword)[5], bool throw_if_fail = true)
+    {
+        auto begin = &keyword[0];
+        auto end = &keyword[4];
+        uint8_t byte;
+        while (begin != end && (byte=tentative_next()) == *begin++) /*nop*/;
+        if (begin != end)
+        {
+            rewind_tentative();
+            if (throw_if_fail)
+            {
+                throw wav_file_exception( "couldn't find sequence \"" + std::string(keyword, 4) + "\"");
+            }
+        }
+        else
+        {
+            clear_tentative();
+        }
+        return begin == end;
     }
 
-    rule<Iterator, unsigned long()> riff_header, dword, word;
-    rule<Iterator, wav_file(), locals<size_t>>      riff;
-    rule<Iterator, wav_file() >      file;
-    rule<Iterator, riff_fmt(), locals<size_t>>       fmt;
-    rule<Iterator, riff_data(), locals<size_t>>      data;
+    /// Tentatively read a format chunk. Return false if no format chunk was found.
+    bool fmt()
+    {
+        if (!expect("fmt ", false)) return false;
+
+        // we're commited now. Any failure from this point is a file format error.
+        uint32_t chunksize = 0;
+        read( chunksize);
+        expect( chunksize >= 16, "fmt chunk is unexpectedly small");
+
+        read( result.fmt.compression);
+        read( result.fmt.channels);
+        read( result.fmt.samplerate);
+        read( result.fmt.bytes_per_second);
+        read( result.fmt.block_align);
+        read( result.fmt.bits_per_sample);
+
+        // add 1 if chunksize is odd.
+        chunksize += chunksize%2;
+        chunksize -= 16;
+        while (chunksize) next();
+
+        return expect(in, "format error while reading format chunk");
+    }
+
+    /// Tentatively read a data chunk. Return false if no data chunk was found.
+    bool data()
+    {
+        if (!expect("data", false)) return false;
+        uint32_t chunksize = 0;
+        read( result.data.size);
+        result.data.pos = in.tellg();
+        in.seekg( result.data.size + result.data.size%2, std::ios_base::cur);
+        return in;
+    }
+
+    /// read a 4-byte little endian integer
+    bool read( uint32_t &value)
+    {
+        // not the fastest implementation, but it's short and portable.
+        value = next();
+        value |= next() << 8;
+        value |= next() << 16;
+        value |= next() << 24;
+        return in;
+    }
+
+    /// read a 2-byte little endian integer
+    bool read( uint16_t &value)
+    {
+        value = next();
+        value |= next() << 8;
+        return in;
+    }
+
+    uint8_t next()
+    {
+        if (!buffer.empty())
+        {
+            auto value = buffer.front();
+            buffer.pop_front();
+            buffer_pos = buffer.begin();
+            return value;
+        }
+        else
+        {
+            return in.rdbuf()->sbumpc(); // narrow to byte.
+        }
+    }
+
+    uint8_t tentative_next()
+    {
+        if (buffer_pos == buffer.end())
+        {
+            auto value = in.rdbuf()->sbumpc();
+            buffer.push_back( value);
+            buffer_pos = buffer.end();
+            return value;
+        }
+        else
+        {
+            return *buffer_pos++;
+        }
+    }
+
+    void rewind_tentative()
+    {
+        buffer_pos = buffer.begin();
+    }
+
+    void clear_tentative()
+    {
+        buffer.clear();
+        buffer_pos = buffer.end();
+    }
+
+    /// throw an exception if the input value is false, return the input value otherwise
+    static bool expect( bool input, const std::string &expected_as_string)
+    {
+        if (!input) throw wav_file_exception( expected_as_string);
+        return input;
+    }
+
+    std::istream    &in;
+    wav_file        &result;
+    using deque = std::deque<uint8_t>;
+    deque buffer;
+    deque::const_iterator buffer_pos = buffer.begin();
 };
 
 /// parse the wav file that the istream 'in' refers to and return the result in a wav_file structure
@@ -121,12 +181,7 @@ struct wav_parser: grammar< Iterator, wav_file()>
 bool parse_wavfile( std::istream &in, wav_file &result)
 {
     // don't skip whitespaces.
-    in.unsetf( ios_base::skipws);
-    using iterator = boost::spirit::istream_iterator;
-    iterator first( in), last;
-    // parse the stream
-    wav_parser<iterator> parser;
-    boost::spirit::qi::parse( first, last, parser, result);
-
-    return first == last;
+    in.unsetf( std::ios_base::skipws);
+    wav_reader reader(in, result);
+    return reader.riff();
 }
