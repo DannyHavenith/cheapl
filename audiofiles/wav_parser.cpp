@@ -61,7 +61,7 @@ private:
         }
         else
         {
-            clear_tentative();
+            flush_tentative();
         }
         return begin == end;
     }
@@ -121,21 +121,23 @@ private:
         return in;
     }
 
+    /// get the next character, either from the buffer or directly from the file if there are no characters to read from the buffer.
     uint8_t next()
     {
-        if (!buffer.empty())
+        uint8_t result;
+        if (buffer_pos != buffer.end())
         {
-            auto value = buffer.front();
-            buffer.pop_front();
-            buffer_pos = buffer.begin();
-            return value;
+            result = *buffer_pos++;
         }
         else
         {
-            return in.rdbuf()->sbumpc(); // narrow to byte.
+            result = in.rdbuf()->sbumpc(); // narrow to byte.
         }
+        flush_tentative();
+        return result;
     }
 
+    /// get the next character, but also store it in the buffer, so that a rewind_tentative undoes this read action.
     uint8_t tentative_next()
     {
         if (buffer_pos == buffer.end())
@@ -156,10 +158,9 @@ private:
         buffer_pos = buffer.begin();
     }
 
-    void clear_tentative()
+    void flush_tentative()
     {
-        buffer.clear();
-        buffer_pos = buffer.end();
+        buffer_pos = buffer.erase( buffer.begin(), buffer_pos);
     }
 
     /// throw an exception if the input value is false, return the input value otherwise
@@ -173,7 +174,7 @@ private:
     wav_file        &result;
     using deque = std::deque<uint8_t>;
     deque buffer;
-    deque::const_iterator buffer_pos = buffer.begin();
+    deque::iterator buffer_pos = buffer.begin();
 };
 
 /// parse the wav file that the istream 'in' refers to and return the result in a wav_file structure
