@@ -15,8 +15,18 @@ void list_cards( std::ostream &output)
     alsalib &alsa( alsalib::get_instance());
     for (auto card : alsa.get_cards())
     {
-        output << card.get_name() << '\n';
+        output << card.get_index() << '\t' << card.get_name() << '\n';
     }
+}
+
+soundcard find_card( const std::string &name)
+{
+    alsalib &alsa( alsalib::get_instance());
+    for (auto card : alsa.get_cards())
+    {
+        if (card.get_name() == name) return card;
+    }
+    throw std::runtime_error("could not find sound card with name: " + name);
 }
 
 int main()
