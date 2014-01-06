@@ -56,11 +56,8 @@ public:
     typedef iterator_t iterator_type;
     typedef typename iterator_type::value_type value_type;
 
-    /// Construct a container. The handle argument should be the initial handle value.
-    /// Typically this is -1. The begin-iterator is created 'incrementing' that initial value (typically by calling some alsa function).
-    /// The initial value is also the end-value of iterators (alsa will set the integer enumeration value to -1 to indicate there are no
-    /// more objects to enumerate.
-    alsa_container( handle_t handle = handle_t{-1})
+    /// Construct a container.
+    alsa_container( handle_t handle)
     :handle( handle) {}
 
     iterator_type begin() const
@@ -121,9 +118,108 @@ public:
 		return index != other.index;
 	}
 
+	pcm_device operator*() const
+	{
+	    return pcm_device( index);
+	}
+
 private:
-	int index = -1;
+	int index{-1};
 	snd_ctl_t *card_handle;
+};
+
+/// a utility object that will create an alsa-related object using the proper malloc function and that
+/// will automatically free that same object using the proper free function, when destructed.
+template< typename object_type, int (*alloc_func)( object_type **), void (*free_func)( object_type *)>
+class alsa_object_wrapper
+{
+public:
+    alsa_object_wrapper()
+    :ptr( allocate(), free_func){}
+
+    object_type *get() const
+    {
+        return ptr.get();
+    }
+
+    object_type &operator*() const
+    {
+        return *ptr;
+    }
+
+    object_type *operator->() const
+    {
+        return ptr.get();
+    }
+
+private:
+    static object_type *allocate()
+    {
+        object_type *ptr = nullptr;
+        throw_if_error( alloc_func( &ptr));
+        return ptr;
+    }
+    std::shared_ptr<object_type> ptr;
+};
+
+#define ALSA_OBJECT_WRAPPER( objecttype) alsa_object_wrapper<objecttype##_t, objecttype##_malloc, objecttype##_free>;
+using snd_ctl_card_info_wrapper = ALSA_OBJECT_WRAPPER(snd_ctl_card_info);
+using snd_pcm_hw_params_wrapper = ALSA_OBJECT_WRAPPER( snd_pcm_hw_params);
+
+
+
+class opened_pcm_device
+{
+public:
+    opened_pcm_device( int cardnumber, int devicenumber, snd_pcm_stream_t stream)
+    :handle( open(cardnumber,devicenumber, stream), snd_pcm_close)
+    {
+        snd_pcm_hw_params_any( handle.get(), hw_params.get());
+    }
+
+    snd_pcm_hw_params_t *get_hw_params() const
+    {
+        return hw_params.get();
+    }
+
+private:
+
+    static snd_pcm_t *open( int cardnumber, int devicenumber, snd_pcm_stream_t stream)
+    {
+        snd_pcm_t *handle = nullptr;
+        using std::to_string;
+        const std::string devicename = "plughw:" + to_string(cardnumber) + ","+ to_string( devicenumber);
+        throw_if_error(snd_pcm_open( &handle, devicename.c_str(), stream, 0));
+        return handle;
+    }
+
+    template<typename V>
+    struct parameter_type {};
+
+    template<typename P, typename H, typename V>
+    struct parameter_type<int (*)(H *, P *, V )>
+    {
+        using type = V;
+    };
+
+    template<typename T>
+    void set( int (*set_func)(snd_pcm_t *, snd_pcm_hw_params_t *, T ), T value)
+    {
+        throw_if_error( set_func(get_handle(), get_params(), value));
+    }
+
+    snd_pcm_t *get_handle() const
+    {
+        return handle.get();
+    }
+
+    snd_pcm_hw_params_t *get_params() const
+    {
+        return hw_params.get();
+    }
+
+    std::shared_ptr<snd_pcm_t>  handle;
+    snd_pcm_hw_params_wrapper   hw_params;
 };
 
 /// This class represents an opened alsa sound card.
@@ -133,12 +229,9 @@ private:
 class opened_soundcard: boost::noncopyable
 {
 public:
-	opened_soundcard(const std::string &devicename)
+	opened_soundcard( int cardnumber)
+    :cardnumber{cardnumber}, handle{ open_snd_ctl( cardnumber)}, devices{ handle}
 	{
-		throw_if_error(snd_ctl_open(&handle, devicename.c_str(), 0));
-		snd_ctl_card_info_t *temp_info = 0;
-		snd_ctl_card_info_malloc(&temp_info);
-		info.reset(temp_info, snd_ctl_card_info_free);
 		snd_ctl_card_info(handle, info.get());
 	}
 
@@ -147,9 +240,10 @@ public:
 		return info.get();
 	}
 
-	const std::string &get_devicename() const
+
+	int get_cardnumber() const
 	{
-		return devicename;
+	    return cardnumber;
 	}
 
 	~opened_soundcard()
@@ -157,25 +251,37 @@ public:
 		snd_ctl_close(handle);
 	}
 
-    using  device_container_type = alsa_container<pcm_device_iterator> ;
+    using  device_container_type = alsa_container<pcm_device_iterator, snd_ctl_t *> ;
     const device_container_type& pcm_devices() const
     {
         return devices;
     }
 private:
-	std::string                          devicename;
-	snd_ctl_t                            *handle;
-	std::shared_ptr<snd_ctl_card_info_t> info;
-	device_container_type             devices;
+
+    /// Small function that returns a snd_ctl_t pointer. The alsa function
+    /// doesn't return such a pointer, but takes it as an output parameter, which makes it
+    /// tricky to use in member initializers.
+    static snd_ctl_t *open_snd_ctl( int devicenumber)
+    {
+        snd_ctl_t *handle = nullptr;
+        const std::string devicename = "hw:" + std::to_string( devicenumber);
+        throw_if_error(snd_ctl_open(&handle, devicename.c_str(), 0));
+        return handle;
+    }
+
+    int                   cardnumber;
+	snd_ctl_t             *handle;
+	snd_ctl_card_info_wrapper info;
+	device_container_type devices;
 };
 
 /// This class is used to identify each opened_soundcard instance to
 /// boost.flyweight.
-struct soundcard_devicename_extractor
+struct soundcard_devicenumber_extractor
 {
-	const std::string &operator()(const opened_soundcard &card)
+	int operator()(const opened_soundcard &card)
 	{
-		return card.get_devicename();
+		return card.get_cardnumber();
 	}
 };
 
@@ -186,7 +292,7 @@ class soundcard
 public:
 
 	explicit soundcard(int index) :
-			index(index), card{ "hw:" + std::to_string(index) }
+			index(index), card{ index }
 	{
 	}
 
@@ -202,8 +308,12 @@ public:
 	    return index;
 	}
 
-	using  soundcard_container_type = opened_soundcard::soundcard_container_type;
-	const soundcard_container_type &get_
+	using  device_container_type = opened_soundcard::device_container_type;
+    const device_container_type& pcm_devices() const
+    {
+        return get_card().pcm_devices();
+    }
+
 private:
 
 	const opened_soundcard &get_card() const
@@ -213,8 +323,8 @@ private:
 
 	int index;
 	using card_flyweight_type =  boost::flyweights::flyweight<
-			boost::flyweights::key_value<std::string, opened_soundcard,
-					soundcard_devicename_extractor> >;
+			boost::flyweights::key_value<int, opened_soundcard,
+					soundcard_devicenumber_extractor> >;
 
 	card_flyweight_type card;
 };

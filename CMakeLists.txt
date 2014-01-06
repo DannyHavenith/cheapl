@@ -10,10 +10,10 @@ cmake_minimum_required(VERSION 2.6)
 project(cheapl)
 add_definitions(-D_SCL_SECURE_NO_WARNINGS)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-FIND_PACKAGE( ALSA)
-set( libraries ${ALSA_LIBRARIES})
+
 IF (CMAKE_HOST_UNIX)
-	list( APPEND libraries pthread)
+	FIND_PACKAGE( ALSA)
+	set( libraries ${ALSA_LIBRARIES} pthread)
 ENDIF (CMAKE_HOST_UNIX)
 
 include_directories(${ALSA_INCLUDE_DIRS} ${cheapl_SOURCE_DIR})
