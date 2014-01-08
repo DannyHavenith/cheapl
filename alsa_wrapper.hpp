@@ -167,6 +167,17 @@ using snd_ctl_card_info_wrapper = ALSA_OBJECT_WRAPPER(snd_ctl_card_info);
 using snd_pcm_hw_params_wrapper = ALSA_OBJECT_WRAPPER( snd_pcm_hw_params);
 
 
+#define IMPLEMENT_PARAM( name)    \
+        void name( typename parameter_type<decltype(snd_pcm_hw_params_set_##name)>::type val) \
+        {                               \
+            set( snd_pcm_hw_params_set_##name, val);\
+        }\
+        typename parameter_type<decltype(snd_pcm_hw_params_set_##name)>::type name() const\
+        {\
+            return get( snd_pcm_hw_params_get_##name);\
+        }\
+        /**/
+
 
 class opened_pcm_device
 {
@@ -177,11 +188,42 @@ public:
         snd_pcm_hw_params_any( handle.get(), hw_params.get());
     }
 
-    snd_pcm_hw_params_t *get_hw_params() const
+    template<typename V>
+    struct parameter_type {};
+
+    template<typename P, typename H, typename V>
+    struct parameter_type<int (H *, P *, V )>
     {
-        return hw_params.get();
+        using type = V;
+    };
+
+    template<typename P, typename H, typename V, typename W>
+    struct parameter_type<int (H *, P *, V , W)>
+    {
+        using type = std::pair<V, W>;
+    };
+
+    IMPLEMENT_PARAM( format)
+    IMPLEMENT_PARAM( channels)
+    IMPLEMENT_PARAM( access)
+    IMPLEMENT_PARAM( rate)
+    IMPLEMENT_PARAM( period_size)
+    IMPLEMENT_PARAM( period_time)
+
+    void commit_parameters()
+    {
+        throw_if_error(snd_pcm_hw_params( get_handle(), get_params()));
     }
 
+    void writei( char *buffer, size_t framecount)
+    {
+        snd_pcm_writei( get_handle(), buffer, framecount);
+    }
+
+    void drain()
+    {
+        snd_pcm_drain( get_handle());
+    }
 private:
 
     static snd_pcm_t *open( int cardnumber, int devicenumber, snd_pcm_stream_t stream)
@@ -193,19 +235,32 @@ private:
         return handle;
     }
 
-    template<typename V>
-    struct parameter_type {};
-
-    template<typename P, typename H, typename V>
-    struct parameter_type<int (*)(H *, P *, V )>
-    {
-        using type = V;
-    };
-
     template<typename T>
     void set( int (*set_func)(snd_pcm_t *, snd_pcm_hw_params_t *, T ), T value)
     {
         throw_if_error( set_func(get_handle(), get_params(), value));
+    }
+
+    template<typename T, typename U>
+    void set( int (*set_func)(snd_pcm_t *, snd_pcm_hw_params_t *, T , U), std::pair<T, U> value)
+    {
+        throw_if_error( set_func(get_handle(), get_params(), value.first, value.second));
+    }
+
+    template< typename T>
+    T get( int (*get_func)(const snd_pcm_hw_params_t *, T *)) const
+    {
+        T value;
+        throw_if_error( get_func( get_params(), &value));
+        return value;
+    }
+
+    template< typename T, typename U >
+    std::pair< T, U> get( int (*get_func)(const snd_pcm_hw_params_t *, T *, U *)) const
+    {
+        std::pair<T, U> value;
+        throw_if_error( get_func( get_params(), &value.first, &value.second));
+        return value;
     }
 
     snd_pcm_t *get_handle() const
