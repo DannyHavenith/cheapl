@@ -7,6 +7,8 @@
 #include "alsa_wrapper.hpp"
 #include "audiofiles/include/wav_parser.hpp"
 #include "audiofiles/include/wav_file.hpp"
+#include "xpl_application_service.h"
+
 #include <iostream>
 #include <fstream>
 
@@ -106,6 +108,7 @@ int main()
 {
     try
     {
+        xpl::application_service service;
         list_cards( std::cout);
         auto device = find_card_pcm( "Generic USB Audio Device");
         opened_pcm_device pcm( device.first, device.second, SND_PCM_STREAM_PLAYBACK);
