@@ -29,8 +29,9 @@ public:
 
     bool riff()
     {
-        expect( "RIFF");
         uint32_t filesize;
+
+        expect( "RIFF");
         read( filesize);
         expect( "WAVE");
 

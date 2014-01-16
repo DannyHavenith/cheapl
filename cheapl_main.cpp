@@ -108,15 +108,20 @@ int main()
 {
     try
     {
-        xpl::application_service service;
+        xpl::application_service service{"cheapl-bridge.home", "0.1"};
         list_cards( std::cout);
         auto device = find_card_pcm( "Generic USB Audio Device");
         opened_pcm_device pcm( device.first, device.second, SND_PCM_STREAM_PLAYBACK);
         play_wav( pcm, "/home/danny/Documents/433Mhz_experiments/onA.wav");
+        service.run();
     }
     catch (std::exception &e)
     {
         std::cerr << "something went wrong: " << e.what() << std::endl;
+    }
+    catch (boost::system::error_code &e)
+    {
+        std::cerr << "system error: " << e.message() << std::endl;
     }
 
 	return 0;
