@@ -104,6 +104,7 @@ void play_wav( opened_pcm_device &device, const std::string &wavfilename)
 
     device.drain();
 }
+
 int main()
 {
     try

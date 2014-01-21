@@ -5,7 +5,9 @@
  *      Author: danny
  *
  */
+#include "datagramparser.h"
 #include "xpl_application_service.h"
+
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -14,11 +16,13 @@
 
 #include <iostream>
 #include <iomanip>
+#include <string>
 
 namespace ba = boost::asio;
 namespace bs = boost::system;
 namespace pt = boost::posix_time;
 using ba::ip::udp;
+using boost::bind;
 
 namespace {
     /// initial heartbeat period, when we haven't been seen by our local hub.
@@ -32,6 +36,11 @@ namespace {
 
     /// discovery period should be at most 120s, or 120/3 heartbeats.
     const int max_discovery_count = 120/discovery_heartbeat_period.seconds();
+
+    // the three xpl message types. xpl-cmnd, xpl-stat or xpl-trig
+    const std::string command_type{"xpl-cmnd"};
+    const std::string status_type{"xpl-stat"};
+    const std::string trigger_type{"xpl-trig"};
 }
 
 namespace xpl
@@ -51,6 +60,12 @@ struct application_service::impl
     udp::endpoint       receive_endpoint{udp::v4(), 0};
     udp::socket         socket{ io_service, receive_endpoint};
     ba::deadline_timer  heartbeat_timer{ io_service};
+
+    using handler = application_service::handler;
+    using handler_map = std::map< std::string, handler>;
+    using command_handler_map = std::map< std::string, handler_map>;
+
+    command_handler_map handlers{{command_type, {}}, {status_type, {}},{trigger_type, {}}};;
 };
 
 application_service::application_service(
@@ -58,6 +73,8 @@ application_service::application_service(
         const std::string &version_string)
 :pimpl{new application_service::impl}, application_id{application_id}, version_string{version_string}
 {
+    // add a handler for heartbeat requests that just immediately sends a heartbeat.
+    register_command("hbeat.request", bind( &application_service::send_heartbeat_message, this));
 }
 
 application_service::~application_service() = default;
@@ -69,6 +86,7 @@ void application_service::run()
     using time_traits_t = ba::time_traits<boost::posix_time::ptime>;
     timer.expires_at( time_traits_t::now() + discovery_heartbeat_period);
     timer.async_wait( boost::bind(&application_service::discovery_heartbeat, this, ba::placeholders::error, 0));
+    start_read();
     get_impl().io_service.run();
 }
 
@@ -98,8 +116,9 @@ void application_service::discovery_heartbeat( const boost::system::error_code& 
 
 /*
  * Send a heartbeat message.
- * After sending the heartbeat message a timer is set to call this function again. If we're not connected yet,
- * this timer will expire fairly quickly, if we're connected a longer timeout is chosen.
+ * After sending the heartbeat message a timer is set to call this function again. If we're not connected yet
+ * this timer will expire fairly quickly, resulting in a high frequency heartbeat. If we're connected, a
+ * longer timeout is chosen.
  */
 void application_service::heartbeat( const boost::system::error_code& e)
 {
@@ -127,7 +146,7 @@ void application_service::heartbeat( const boost::system::error_code& e)
 void application_service::send_heartbeat_message()
 {
     const std::string message =
-            "xpl-stat\n"                                                "\n"
+            "xpl-stat"                                                 "\n"
             "{"                                                         "\n"
             "hop=1"                                                     "\n"
             "source=" + application_id +                                "\n"
@@ -156,9 +175,78 @@ application_service::impl& application_service::get_impl()
     return *pimpl;
 }
 
+void application_service::register_command(
+        const std::string& schema,
+        application_service::handler h)
+{
+    get_impl().handlers[command_type][schema] = h;
+}
+
+void application_service::register_status( const std::string& schema, application_service::handler h)
+{
+    get_impl().handlers[status_type][schema] = h;
+}
+
+void application_service::register_trigger( const std::string& schema,
+        application_service::handler h)
+{
+    get_impl().handlers[trigger_type][schema] = h;
+}
+
 const application_service::impl& application_service::get_impl() const
 {
     return *pimpl;
+}
+
+void application_service::start_read()
+{
+    get_impl().socket.async_receive( ba::buffer( receive_buffer),
+            [this]( const bs::error_code &error, std::size_t bytes_received)
+            {
+                if (error) throw error;
+                using separator_t = boost::char_separator<char>;
+                using tokenizer_t = boost::tokenizer<separator_t, const char *>;
+                tokenizer_t tokenizer( receive_buffer, receive_buffer + bytes_received, separator_t("\n"));
+                datagram_parser parser;
+                for( const auto &line: tokenizer)
+                {
+                    std::cout << "line:" << line;
+                    parser.feed_line( line);
+                }
+                if (parser.is_ready())
+                {
+                    handle_message( parser.get_message());
+                }
+                start_read();// start the next read
+            });
+}
+
+void application_service::handle_message(const xpl::message &m)
+{
+    try
+    {
+        const std::string target = m.headers.at("target");
+        // only act if this message was intended for us.
+        if ( target == "*" || target == application_id)
+        {
+            // if we receive our own heartbeat, we know we've been connected by a hub.
+            if (!connected && m.message_schema == "hbeat.app" && m.headers.at("source") == application_id)
+            {
+                connected = true;
+            }
+
+            // find a handler for the message and invoke it.
+            auto handler_it = get_impl().handlers[m.message_type].find(m.message_schema);
+            if (handler_it != get_impl().handlers[m.message_type].end() && handler_it->second)
+            {
+                handler_it->second( m);
+            }
+        }
+    }
+    catch (std::out_of_range &)
+    {
+
+    }
 }
 
 } // end of namespace xpl

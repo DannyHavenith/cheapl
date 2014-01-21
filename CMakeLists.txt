@@ -40,6 +40,7 @@ add_executable(
 	
 	cheapl_main.cpp
 	xpl_application_service.cpp
+	datagramparser.cpp
 	)
 
 target_link_libraries(cheapl audiofiles ${libraries})	
