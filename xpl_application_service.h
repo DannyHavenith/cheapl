@@ -1,9 +1,10 @@
-/*
- * xpl_application_service.h
- *
- *  Created on: Jan 9, 2014
- *      Author: danny
- */
+//
+// Copyright (c) 2013, 2014 Danny Havenith
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+
 
 #ifndef XPL_APPLICATION_SERVICE_H_
 #define XPL_APPLICATION_SERVICE_H_
@@ -18,6 +19,15 @@ namespace xpl
 {
 
 class message;
+
+/// This class implements a generic xpl application service.
+/// This class will, when the run() member function is called automatically start to broadcast
+/// UDP heartbeat messages and will listen for UDP xpl messages. Whenever an xpl
+/// message (command, status or trigger) is received, this class will dispatch the message
+/// to any registered handler for that message.
+/// Message handlers may be registered by calling the register_command(), register_status() or
+/// register_trigger() function.
+/// The send() member function can be used to send xpl messages through this server.
 class application_service
 {
 public:
@@ -25,12 +35,15 @@ public:
             const std::string &version_string);
     ~application_service();
     void run();
+
+    /// returns whether this service has received messages from an xpl hub.
     bool is_connected() const {return connected;}
 
     using handler = std::function<void ( const message &)>;
     void register_command( const std::string &schema, handler h);
     void register_status(  const std::string &schema, handler h);
     void register_trigger( const std::string &schema, handler h);
+    void send( message m);
 
 private:
     void discovery_heartbeat( const boost::system::error_code& e, unsigned int counter);

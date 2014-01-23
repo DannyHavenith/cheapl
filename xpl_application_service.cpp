@@ -41,6 +41,27 @@ namespace {
     const std::string command_type{"xpl-cmnd"};
     const std::string status_type{"xpl-stat"};
     const std::string trigger_type{"xpl-trig"};
+
+
+    /// convert an xpl-message to a string that can be sent as an
+    /// UDP packet.
+    std::string to_string( const xpl::message &m)
+    {
+        std::ostringstream stream;
+        stream << m.message_type << "\n{\n";
+        for (const auto &header_value : m.headers)
+        {
+            stream << header_value.first << '=' << header_value.second << '\n';
+        }
+        stream << "}\n";
+        stream << m.message_schema << "\n{\n";
+        for (const auto &body_value : m.body)
+        {
+            stream << body_value.first << '=' << body_value.second << '\n';
+        }
+        stream << "}\n";
+        return stream.str();
+    }
 }
 
 namespace xpl
@@ -175,6 +196,13 @@ application_service::impl& application_service::get_impl()
     return *pimpl;
 }
 
+/// Register a handler for command messages.
+/// The handler should have a signature compatible with:
+/// @code
+/// void handler( const xpl::message &m)
+/// @endcode
+/// Whenever a message with the given schema arrives at this server, the given handler will be
+/// invoked. Any previously registered handler for the same message schema will be discarded.
 void application_service::register_command(
         const std::string& schema,
         application_service::handler h)
@@ -182,22 +210,40 @@ void application_service::register_command(
     get_impl().handlers[command_type][schema] = h;
 }
 
+/// Register a handler for status messages
+/// @see register_command()
 void application_service::register_status( const std::string& schema, application_service::handler h)
 {
     get_impl().handlers[status_type][schema] = h;
 }
 
+/// Register a handler for trigger messages.
+/// @see register_command()
 void application_service::register_trigger( const std::string& schema,
         application_service::handler h)
 {
     get_impl().handlers[trigger_type][schema] = h;
 }
 
+/// Schedule a message to be sent and return immediately.
+void application_service::send( message m)
+{
+    m.headers["source"] = application_id;
+    std::string as_string = to_string( m);
+    get_impl().io_service.post( [as_string, this](){
+        get_impl().socket.send_to( ba::buffer( as_string), get_impl().send_endpoint);
+    });
+}
+
+/// get a reference to the implementation class
 const application_service::impl& application_service::get_impl() const
 {
     return *pimpl;
 }
 
+/// Start an asynchronous read operation.
+/// This starts an operation that will read a message and consequently parse and dispatch to any registered
+/// handlers.
 void application_service::start_read()
 {
     get_impl().socket.async_receive( ba::buffer( receive_buffer),
@@ -221,11 +267,15 @@ void application_service::start_read()
             });
 }
 
+/// Deal with an incoming message.
+/// This function will dispatch the given message to any registered handlers for the message schema.
+/// If the message is a heartbeat request, this function will immediately send a heartbeat before dispatching
+/// the message to any registered handler.
 void application_service::handle_message(const xpl::message &m)
 {
     try
     {
-        const std::string target = m.headers.at("target");
+        const auto &target = m.headers.at("target");
         // only act if this message was intended for us.
         if ( target == "*" || target == application_id)
         {
@@ -245,7 +295,7 @@ void application_service::handle_message(const xpl::message &m)
     }
     catch (std::out_of_range &)
     {
-
+        // if any of the 'at()' calls fails, we silently ignore the incoming message.
     }
 }
 

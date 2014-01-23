@@ -17,6 +17,7 @@ struct message
 {
     using string = std::string;
     using map = std::map<string, string>;
+
     string  message_type;
     string  message_schema;
     map     headers;

@@ -15,6 +15,7 @@
 #include <memory>
 #include <boost/utility.hpp>
 #include <iterator>
+#include <utility> // for std::pair
 
 /// exception thrown when the alsa wrapper encounters an underlying alsa error.
 class alsa_exception: public std::exception
@@ -187,6 +188,9 @@ public:
     {
         snd_pcm_hw_params_any( handle.get(), hw_params.get());
     }
+
+    opened_pcm_device( std::pair<int, int> deviceid, snd_pcm_stream_t stream)
+    :opened_pcm_device( deviceid.first, deviceid.second, stream) {}
 
     template<typename V>
     struct parameter_type {};
