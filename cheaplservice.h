@@ -1,9 +1,10 @@
-/*
- * cheaplservice.h
- *
- *  Created on: Jan 21, 2014
- *      Author: danny
- */
+//
+//  Copyright (C) 2014 Danny Havenith
+//
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+//
 
 #ifndef CHEAPLSERVICE_H_
 #define CHEAPLSERVICE_H_
@@ -15,6 +16,9 @@ namespace xpl
 
 class message;
 
+/// This class acts as an xPL service. It listens on an UDP port for xPL messages and when messages of the right type (x10 schema commands)
+/// arrive, a corresponding wav-file will be played on the given soundcard device. The soundcard is supposed to be connected to an RF-transmitter.
+/// This service will only run while the run() member function is being executed.
 class cheapl_service
 {
 public:

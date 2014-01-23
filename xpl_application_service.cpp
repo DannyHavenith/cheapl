@@ -1,10 +1,11 @@
-/*
- * xpl_application_service.cpp
- *
- *  Created on: Jan 9, 2014
- *      Author: danny
- *
- */
+//
+//  Copyright (C) 2014 Danny Havenith
+//
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+//
+
 #include "datagramparser.h"
 #include "xpl_application_service.h"
 
@@ -67,6 +68,8 @@ namespace {
 namespace xpl
 {
 
+/// Implementatin of the pimpl (bridge) pattern.
+/// This struct contains the private data for an xPL application service.
 struct application_service::impl
 {
     impl()
@@ -89,6 +92,8 @@ struct application_service::impl
     command_handler_map handlers{{command_type, {}}, {status_type, {}},{trigger_type, {}}};;
 };
 
+/// Construct a service that will listen for xPL UDP messages.
+/// Messages that are sent from this service will have the given application id and version string.
 application_service::application_service(
         const std::string &application_id,
         const std::string &version_string)
@@ -98,8 +103,14 @@ application_service::application_service(
     register_command("hbeat.request", bind( &application_service::send_heartbeat_message, this));
 }
 
+/// default constructor. explicitly defined in this translation unit so that
+/// the impl destructor is in scope of this one.
 application_service::~application_service() = default;
 
+/// Run the actual xPL service.
+/// While this run() function is executing, the xPL server will listen to incoming messages on its
+/// UDP port and dispatch those messages to any registered handlers.
+/// At the same time, this class will send regular heartbeat messages.
 void application_service::run()
 {
     ba::deadline_timer &timer = get_impl().heartbeat_timer;
@@ -186,12 +197,20 @@ void application_service::send_heartbeat_message()
     get_impl().socket.send_to( ba::buffer( message), get_impl().send_endpoint);
 }
 
+/// Get the UDP port number that this service is listening on.
 unsigned int application_service::get_listening_port() const
 {
     return get_impl().socket.local_endpoint().port();
 }
 
+/// pimpl implementation: get a reference to the implementation object.
 application_service::impl& application_service::get_impl()
+{
+    return *pimpl;
+}
+
+/// get a reference to the implementation class
+const application_service::impl& application_service::get_impl() const
 {
     return *pimpl;
 }
@@ -233,12 +252,6 @@ void application_service::send( message m)
     get_impl().io_service.post( [as_string, this](){
         get_impl().socket.send_to( ba::buffer( as_string), get_impl().send_endpoint);
     });
-}
-
-/// get a reference to the implementation class
-const application_service::impl& application_service::get_impl() const
-{
-    return *pimpl;
 }
 
 /// Start an asynchronous read operation.

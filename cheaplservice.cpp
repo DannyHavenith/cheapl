@@ -1,9 +1,11 @@
-/*
- * cheaplservice.cpp
- *
- *  Created on: Jan 21, 2014
- *      Author: danny
- */
+//
+//  Copyright (C) 2014 Danny Havenith
+//
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+//
+
 #include <map>
 #include <boost/filesystem.hpp>
 #include <boost/regex.hpp>
@@ -20,6 +22,8 @@
 namespace bf = boost::filesystem;
 
 namespace {
+
+/// Find a PCM output device for the alsa sound card with the given name.
 std::pair<int, int> find_card_pcm( const std::string &cardname)
 {
     auto &alsa( alsalib::get_instance());
@@ -42,7 +46,7 @@ std::pair<int, int> find_card_pcm( const std::string &cardname)
     throw std::runtime_error("could not find sound card with name: " + cardname);
 }
 
-
+/// Find an alsa sound card with the given name.
 soundcard find_card( const std::string &name)
 {
     alsalib &alsa( alsalib::get_instance());
@@ -53,6 +57,7 @@ soundcard find_card( const std::string &name)
     throw std::runtime_error("could not find sound card with name: " + name);
 }
 
+/// convert a size in bits into a SND_PCM enum value for use in alsa functions.
 snd_pcm_format_t bitsize_to_pcm_format( unsigned int bitsize)
 {
     if (bitsize <= 8) return SND_PCM_FORMAT_U8;
@@ -62,6 +67,8 @@ snd_pcm_format_t bitsize_to_pcm_format( unsigned int bitsize)
     throw std::runtime_error( "don't know how to handle samples of bitsize " + std::to_string( bitsize));
 }
 
+/// Given a riff_fmt object that was the result of parsing a wav-file, push the wav-file attributes such
+/// as sample rate and channel count to the given pcm device.
 void set_parameters_from_wav( opened_pcm_device &device, const riff_fmt &format)
 {
     device.format( bitsize_to_pcm_format(format.bits_per_sample));
@@ -70,6 +77,7 @@ void set_parameters_from_wav( opened_pcm_device &device, const riff_fmt &format)
     device.access( SND_PCM_ACCESS_RW_INTERLEAVED);
 }
 
+/// play the contents of the given wav-file to the given alsa pcm device.
 void play_wav( opened_pcm_device &device, const std::string &wavfilename)
 {
     wav_file wav;
@@ -103,20 +111,27 @@ void play_wav( opened_pcm_device &device, const std::string &wavfilename)
 
 namespace xpl
 {
+
+/// Implementation of the pimpl (bridge)-pattern.
+/// This struct contains the private members of the cheapl service.
 struct cheapl_service::impl
 {
     using onoffmap = std::map< std::string, bf::path>;
     using lightsmap = std::map< std::string, onoffmap>;
 
-    application_service service;
-    bf::path directory;
-    lightsmap lights;
-    opened_pcm_device pcm_device;
+    application_service service; ///< xPl service object
+    bf::path            directory;///< directory with wav-files
+    lightsmap           lights;   ///< mapping of device names and command strings to wav-files
+    opened_pcm_device   pcm_device;///< an opened alsa pcm device.
 };
 
-cheapl_service::cheapl_service( const std::string& directoryname,
-        const std::string& soundcardname, const std::string& application_id,
-        const std::string& application_version)
+/// Construct an xPL service.
+/// This constructor may throw an exception if the sound card cannot be found or opened.
+cheapl_service::cheapl_service(
+        const std::string& directoryname, ///< directory containing wav files to be played
+        const std::string& soundcardname, ///< the alsa name of the soundcard device to which the wav files will be played
+        const std::string& application_id,///< application id that will appear in xPL messages.
+        const std::string& application_version ///< application version that will appear in xPL messages)
 :pimpl{
     new impl{
         {application_id, application_version}, // application service
@@ -134,13 +149,16 @@ cheapl_service::cheapl_service( const std::string& directoryname,
     scan_files(directoryname);
 }
 
+/// default implementation of the destructor.
 cheapl_service::~cheapl_service() = default;
 
+/// Start running the xPL service and playing sound files.
 void xpl::cheapl_service::run()
 {
     get_impl().service.run();
 }
 
+/// Utility function that lists all alsa sound cards to the given output stream.
 void cheapl_service::list_cards( std::ostream& output)
 {
     alsalib& alsa(alsalib::get_instance());
@@ -156,11 +174,23 @@ void cheapl_service::list_cards( std::ostream& output)
     }
 }
 
+/// Pimpl pattern: return the internal impl object
 cheapl_service::impl& cheapl_service::get_impl()
 {
     return *pimpl;
 }
 
+/// Pimpl pattern: return the internal impl object
+const cheapl_service::impl& cheapl_service::get_impl() const
+{
+    return *pimpl;
+}
+
+/// Handle x10 command messages.
+/// This function is registered with the xPL service so that incoming
+/// command messages of schema type x10.basic are handled.
+/// This handler recognizes the "on" and "off" command and plays the appropriate
+/// wav-file for the device that is specified in the command message.
 void cheapl_service::handle_command( const message& m)
 {
     try {
@@ -193,6 +223,11 @@ void cheapl_service::handle_command( const message& m)
     }
 }
 
+/// Scan a single directory for wav-files and create a mapping from (device, command) to wav file.
+/// This function scans all files with extension ".wav" in the given directory. If the name is either
+/// "on<devicename>.wav" or "off<devicename>.wav" then the file will be stored as the file associated with
+/// the "on" or "off" command for the given device. If only one of the two wav-files is present for a given
+/// device name, the device will be ignored.
 void cheapl_service::scan_files( const std::string& directoryname)
 {
     using dirit = bf::directory_iterator;
@@ -225,11 +260,6 @@ void cheapl_service::scan_files( const std::string& directoryname)
             ++lights_it;
         }
     }
-}
-
-const cheapl_service::impl& cheapl_service::get_impl() const
-{
-    return *pimpl;
 }
 
 } /* namespace xpl */

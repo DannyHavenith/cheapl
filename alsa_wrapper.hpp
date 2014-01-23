@@ -1,9 +1,10 @@
-/*
- * alsa_wrapper.hpp
- *
- *  Created on: Dec 11, 2013
- *      Author: danny
- */
+//
+//  Copyright (C) 2013 Danny Havenith
+//
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+//
 
 #ifndef ALSA_WRAPPER_HPP_
 #define ALSA_WRAPPER_HPP_

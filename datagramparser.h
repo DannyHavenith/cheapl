@@ -1,9 +1,10 @@
-/*
- * datagramparser.h
- *
- *  Created on: Jan 17, 2014
- *      Author: danny
- */
+//
+//  Copyright (C) 2014 Danny Havenith
+//
+//  Distributed under the Boost Software License, Version 1.0. (See
+//  accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+//
 
 #ifndef DATAGRAMPARSER_H_
 #define DATAGRAMPARSER_H_
