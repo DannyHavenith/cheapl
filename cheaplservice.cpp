@@ -185,6 +185,12 @@ cheapl_service::impl& cheapl_service::get_impl()
     return *pimpl;
 }
 
+/// Sign off from the network.
+void cheapl_service::signoff()
+{
+    get_impl().service.send_termination_message();
+}
+
 /// Pimpl pattern: return the internal impl object
 const cheapl_service::impl& cheapl_service::get_impl() const
 {

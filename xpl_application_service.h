@@ -43,11 +43,12 @@ public:
     void register_status(  const std::string &schema, handler h);
     void register_trigger( const std::string &schema, handler h);
     void send( message m);
+    void send_termination_message();
 
 private:
     void discovery_heartbeat( const boost::system::error_code& e, unsigned int counter);
     void heartbeat( const boost::system::error_code& e);
-    void send_heartbeat_message();
+    void send_heartbeat_message( bool final = false);
     unsigned int get_listening_port() const;
     void start_read();
     void handle_message( const message &m);

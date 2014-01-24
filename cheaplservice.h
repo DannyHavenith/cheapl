@@ -29,6 +29,7 @@ public:
     ~cheapl_service();
     void run();
     static void list_cards( std::ostream& output);
+    void signoff();
 
 private:
     void handle_command( const message &m);

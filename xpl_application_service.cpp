@@ -44,23 +44,25 @@ namespace {
     const std::string trigger_type{"xpl-trig"};
 
 
+    void map_to_stream( const xpl::message::map &map, std::ostream &stream)
+    {
+        stream << "{\n";
+        for (const auto &header_value : map)
+        {
+            stream << header_value.first << '=' << header_value.second << '\n';
+        }
+        stream << "}\n";
+    }
+
     /// convert an xpl-message to a string that can be sent as an
     /// UDP packet.
     std::string to_string( const xpl::message &m)
     {
         std::ostringstream stream;
-        stream << m.message_type << "\n{\n";
-        for (const auto &header_value : m.headers)
-        {
-            stream << header_value.first << '=' << header_value.second << '\n';
-        }
-        stream << "}\n";
-        stream << m.message_schema << "\n{\n";
-        for (const auto &body_value : m.body)
-        {
-            stream << body_value.first << '=' << body_value.second << '\n';
-        }
-        stream << "}\n";
+        stream << m.message_type << '\n';
+        map_to_stream( m.headers, stream);
+        stream << m.message_schema << '\n';
+        map_to_stream( m.body, stream);
         return stream.str();
     }
 }
@@ -100,7 +102,7 @@ application_service::application_service(
 :pimpl{new application_service::impl}, application_id{application_id}, version_string{version_string}
 {
     // add a handler for heartbeat requests that just immediately sends a heartbeat.
-    register_command("hbeat.request", bind( &application_service::send_heartbeat_message, this));
+    register_command("hbeat.request", bind( &application_service::send_heartbeat_message, this, false));
 }
 
 /// default constructor. explicitly defined in this translation unit so that
@@ -173,18 +175,21 @@ void application_service::heartbeat( const boost::system::error_code& e)
 }
 
 /**
- * Send the actual xPL heartbeat message as a UDP broadcast
+ * Send the actual xPL heartbeat message as a UDP broadcast.
+ * If the boolean argument "final" is true the heartbeat message will be
+ * use the hbeat.end schema, signalling that this service is about to end.
  */
-void application_service::send_heartbeat_message()
+void application_service::send_heartbeat_message( bool final)
 {
+    const std::string schema = final?"end":"app";
     const std::string message =
-            "xpl-stat"                                                 "\n"
+            "xpl-stat"                                                  "\n"
             "{"                                                         "\n"
             "hop=1"                                                     "\n"
             "source=" + application_id +                                "\n"
             "target=*"                                                  "\n"
             "}"                                                         "\n"
-            "hbeat.app"                                                 "\n"
+            "hbeat." + schema +                                         "\n"
             "{"                                                         "\n"
             "interval=" + std::to_string( heartbeat_period.minutes() ) +"\n"
             "port=" + std::to_string( get_listening_port()) +           "\n"
@@ -206,6 +211,16 @@ unsigned int application_service::get_listening_port() const
 application_service::impl& application_service::get_impl()
 {
     return *pimpl;
+}
+
+void application_service::send_termination_message()
+{
+    // cancel the heartbeat timer
+    get_impl().heartbeat_timer.cancel();
+
+    // send a final heartbeat message.
+    send_heartbeat_message( true);
+
 }
 
 /// get a reference to the implementation class
@@ -247,7 +262,12 @@ void application_service::register_trigger( const std::string& schema,
 void application_service::send( message m)
 {
     m.headers["source"] = application_id;
+
+    // todo: officially, each xpl message should have its header and body attributes in a specific order. We should
+    // really register this order for each schema type and make sure that they end up in that order in this string.
+    // for now, the members will be ordered alphabetically.
     std::string as_string = to_string( m);
+
     get_impl().io_service.post( [as_string, this](){
         get_impl().socket.send_to( ba::buffer( as_string), get_impl().send_endpoint);
     });
