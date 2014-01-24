@@ -7,19 +7,22 @@ Since the RF device is actually a USB sound card with an RF transmitter slammed 
 
 Usage
 -----
+
     cheapl [<wave file directory> [alsa sound device name]]
     
 example:
+
     cheapl /home/me/data/wavs "Generic USB Audio Device"
  
  CHEAPL will scan the given directory for wav files with a file name that fits the
  following format:
  
- > <command><devicename>.wav
+ <pre>&lt;command&gt;&lt;devicename&gt;.wav</pre>
  
  Where *command* is either *on* or *off* and *devicename* can be any string you like. The device name will be interpreted as an X10 device name.
  
- Creating wav files
- ------------------
+Creating wav files
+------------------
+
  CHEAPL needs wav files, which have been recorded from an RF remote control. The [project page](http://rurandom.org/justintime/index.php?title=Cheapest_ever_433_Mhz_transceiver_for_PCs) will tell you how to do that.
  
