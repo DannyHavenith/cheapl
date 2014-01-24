@@ -16,6 +16,8 @@
 #include "audiofiles/include/wav_parser.hpp"
 #include "audiofiles/include/wav_file.hpp"
 #include "xpl_application_service.h"
+#include "datagramparser.h"
+
 #include <utility>
 #include <fstream>
 

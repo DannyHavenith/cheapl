@@ -10,6 +10,7 @@
 #define CHEAPLSERVICE_H_
 #include <memory> // for unique_ptr
 #include <string>
+#include <iosfwd>
 
 namespace xpl
 {

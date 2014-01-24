@@ -13,7 +13,6 @@
 #include <string>
 
 #include <boost/system/error_code.hpp>
-#include "datagramparser.h"
 
 namespace xpl
 {
