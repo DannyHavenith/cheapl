@@ -84,7 +84,6 @@ void play_wav( opened_pcm_device &device, const std::string &wavfilename)
     std::ifstream wavfile(wavfilename, std::ios::binary);
     if (!parse_wavfile( wavfile,wav)) throw std::runtime_error("parsing file " + wavfilename + " failed");
 
-    std::cout << "bits per sample:" << wav.fmt.bits_per_sample << " rate:" << wav.fmt.samplerate << '\n';
     device.period_size( {128, 0});
     set_parameters_from_wav( device, wav.fmt);
     device.commit_parameters();
@@ -116,7 +115,10 @@ namespace xpl
 /// This struct contains the private members of the cheapl service.
 struct cheapl_service::impl
 {
+    /// mapping from command names to wave files
     using onoffmap = std::map< std::string, bf::path>;
+
+    /// mapping from device names to command maps
     using lightsmap = std::map< std::string, onoffmap>;
 
     application_service service; ///< xPl service object
@@ -199,9 +201,7 @@ void cheapl_service::handle_command( const message& m)
         const auto &device = m.body.at("device");
         if (command == "on" || command == "off")
         {
-            std::cout << "command:" << command << " device: " << device;
             const auto &device_wav = get_impl().lights.at(device).at(command);
-            std::cout << " file:" << device_wav.string() << '\n';
             // todo: delegate wav playing to a separate thread queue.
             play_wav( get_impl().pcm_device, device_wav.string());
             message reply( m);
@@ -242,7 +242,6 @@ void cheapl_service::scan_files( const std::string& directoryname)
         std::string buffer = entry.path().filename().string();
         if (regex_match( buffer, match, onoff_regex))
         {
-            std::cout << "adding (" << match[2] << ", " << match[1] << "=" << entry.path() << "\n";
             get_impl().lights[match[2]][to_lower_copy(match[1].str())]
                                                              = entry.path();
         }

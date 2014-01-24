@@ -49,6 +49,7 @@ config get_config( int argc, char *argv[])
 /// # the name of the alsa sound device to which the sequences should be sent.
 int main( int argc, char *argv[])
 {
+    int result = 0;
     try
     {
         config conf = get_config( argc, argv);
@@ -58,11 +59,13 @@ int main( int argc, char *argv[])
     catch (std::exception &e)
     {
         std::cerr << "something went wrong: " << e.what() << std::endl;
+        result = -1;
     }
     catch (boost::system::error_code &e)
     {
         std::cerr << "system error: " << e.message() << std::endl;
+        result = -2;
     }
 
-	return 0;
+	return result;
 }

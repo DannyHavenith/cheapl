@@ -193,7 +193,6 @@ void application_service::send_heartbeat_message()
             "}"                                                         "\n";
 
     // send the heartbeat message synchronously. throws an error on failure.
-    std::cout << "***\n" << message << "***" << std::endl;
     get_impl().socket.send_to( ba::buffer( message), get_impl().send_endpoint);
 }
 
@@ -269,7 +268,6 @@ void application_service::start_read()
                 datagram_parser parser;
                 for( const auto &line: tokenizer)
                 {
-                    std::cout << "line:" << line;
                     parser.feed_line( line);
                 }
                 if (parser.is_ready())

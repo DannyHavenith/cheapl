@@ -19,6 +19,8 @@ class message;
 /// This class acts as an xPL service. It listens on an UDP port for xPL messages and when messages of the right type (x10 schema commands)
 /// arrive, a corresponding wav-file will be played on the given soundcard device. The soundcard is supposed to be connected to an RF-transmitter.
 /// This service will only run while the run() member function is being executed.
+/// This class an object of type xpl::application_service class for all its xpl communication and uses the alsa_wrapper functions
+/// to play "sounds".
 class cheapl_service
 {
 public:
