@@ -1,7 +1,7 @@
 CHEAPL, a $3 home automation system
 =================================
 
-CHEAPL is an xPL bridge. It acts as an UDP service that listens for xPL messages from a home automation system like, for instance, [domogik](http://www.domogik.org) and it reacts to X10 commands by sending waveforms to a [$3 USB 433Mhz RF device](http://rurandom.org/justintime/index.php?title=Cheapest_ever_433_Mhz_transceiver_for_PCs).
+CHEAPL is an xPL bridge. It acts as an UDP service that listens for xPL messages from a home automation system like, for instance, [domogik](http://www.domogik.org) and it reacts to X10 commands by sending waveforms to a [$3 USB 433Mhz RF device](http://rurandom.org/justintime/index.php?title=CheaplSystem).
 
 Since the RF device is actually a USB sound card with an RF transmitter slammed on to it, what CHEAPL really does is to play sounds to that sound card. As it currently uses ALSA to do that, this will probably only work on linux.
 
@@ -24,5 +24,5 @@ example:
 Creating wav files
 ------------------
 
- CHEAPL needs wav files, which have been recorded from an RF remote control. The [project page](http://rurandom.org/justintime/index.php?title=Cheapest_ever_433_Mhz_transceiver_for_PCs) will tell you how to do that.
+ CHEAPL needs wav files, which have been recorded from an RF remote control. The [project page](http://rurandom.org/justintime/index.php?title=CheaplSystem) will tell you how to do that.
  
