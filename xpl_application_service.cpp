@@ -121,6 +121,7 @@ void application_service::run()
     timer.expires_at( time_traits_t::now() + discovery_heartbeat_period);
     timer.async_wait( boost::bind(&application_service::discovery_heartbeat, this, ba::placeholders::error, 0));
     start_read();
+    std::cout << "starting service on port " << get_listening_port() << '\n';
     get_impl().io_service.run();
 }
 
