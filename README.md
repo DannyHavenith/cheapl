@@ -5,6 +5,8 @@ CHEAPL is an xPL bridge. It acts as an UDP service that listens for xPL messages
 
 Since the RF device is actually a USB sound card with an RF transmitter slammed on to it, what CHEAPL really does is to play sounds to that sound card. As it currently uses ALSA to do that, this will probably only work on linux.
 
+![Cheapl](http://rurandom.org/justintime/images/thumb/f/f3/Transceiver433_cropped.jpg/664px-Transceiver433_cropped.jpg "Frankenstein meets USB soundcard")
+
 Usage
 -----
 
